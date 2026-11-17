@@ -54,7 +54,7 @@ jobs:
           p = Path("build_app/android/app/build.gradle.kts")
           s = p.read_text()
 
-          imports = """import java.io.FileInputStream
+          imports = '''import java.io.FileInputStream
           import java.util.Properties
 
           val keystoreProperties = Properties()
@@ -63,64 +63,65 @@ jobs:
               keystoreProperties.load(FileInputStream(keystorePropertiesFile))
           }
 
-          """
+          '''
           if "val keystoreProperties = Properties()" not in s:
               s = imports + s
 
-          signing = """signingConfigs {
+          signing = '''signingConfigs {
                   create("release") {
                       keyAlias = keystoreProperties.getProperty("keyAlias")
                       keyPassword = keystoreProperties.getProperty("keyPassword")
                       storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
                       storePassword = keystoreProperties.getProperty("storePassword")
                   }
-              }"""
+              }'''
 
-          # Replace Flutter's generated signingConfigs block, if present.
-          match = re.search(r"(?m)^\\s*signingConfigs\\s*\\{", s)
+          # Replace the generated signingConfigs block, or insert one if absent.
+          match = re.search(r'(?m)^\s*signingConfigs\s*\{', s)
           if match:
               brace = s.find("{", match.start())
               depth = 0
-              block_end = None
+              end = None
               for i in range(brace, len(s)):
                   if s[i] == "{":
                       depth += 1
                   elif s[i] == "}":
                       depth -= 1
                       if depth == 0:
-                          block_end = i + 1
+                          end = i + 1
                           break
-              if block_end is None:
-                  raise SystemExit("Could not parse existing signingConfigs block")
-              s = s[:match.start()] + signing + s[block_end:]
+              if end is None:
+                  raise SystemExit("Unable to parse signingConfigs block")
+              s = s[:match.start()] + signing + s[end:]
           else:
-              android = s.find("android {")
-              if android < 0:
-                  raise SystemExit("Could not find android block")
-              build_types = s.find("buildTypes {", android)
-              if build_types < 0:
-                  raise SystemExit("Could not find buildTypes block")
-              s = s[:build_types] + "    " + signing + "\\n    " + s[build_types:]
+              pos = s.find("buildTypes {")
+              if pos < 0:
+                  raise SystemExit("Unable to find buildTypes block")
+              s = s[:pos] + signing + "\n    " + s[pos:]
 
-          # Ensure release builds use the persistent key, not Flutter's debug key.
+          # Point release builds to the persistent upload key.
           bt = s.find("buildTypes {")
-          if bt < 0:
-              raise SystemExit("Could not find buildTypes block")
           rel = s.find("release {", bt)
-          if rel < 0:
-              raise SystemExit("Could not find release build type")
-          close = s.find("}", rel)
-          if close < 0:
-              raise SystemExit("Could not find end of release build type")
-          section = s[rel:close]
-          section = re.sub(
-              r"signingConfig\\s*=\\s*signingConfigs\\.getByName\\(\\"[^\\"]+\\"\\)",
-              'signingConfig = signingConfigs.getByName("release")',
-              section
-          )
+          if bt < 0 or rel < 0:
+              raise SystemExit("Unable to find release build type")
+          depth = 0
+          end = None
+          for i in range(s.find("{", rel), len(s)):
+              if s[i] == "{":
+                  depth += 1
+              elif s[i] == "}":
+                  depth -= 1
+                  if depth == 0:
+                      end = i
+                      break
+          if end is None:
+              raise SystemExit("Unable to parse release build type")
+          section = s[rel:end]
+          section = re.sub(r'signingConfig\s*=\s*signingConfigs\.getByName\("[^"]+"\)',
+                           'signingConfig = signingConfigs.getByName("release")', section)
           if 'signingConfig = signingConfigs.getByName("release")' not in section:
-              section += '\\n        signingConfig = signingConfigs.getByName("release")'
-          s = s[:rel] + section + s[close:]
+              section += '\n        signingConfig = signingConfigs.getByName("release")'
+          s = s[:rel] + section + s[end:]
           p.write_text(s)
           PY
 
