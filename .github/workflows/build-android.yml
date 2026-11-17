@@ -49,26 +49,12 @@ jobs:
           EOF
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path("build_app/android/app/build.gradle.kts")
           s = p.read_text()
-          if "signingConfigs" in s:
-              raise SystemExit("Signing configuration already exists; refusing to duplicate it")
-          block = '''
-              signingConfigs {
-                  create("release") {
-                      keyAlias = keystoreProperties["keyAlias"] as String
-                      keyPassword = keystoreProperties["keyPassword"] as String
-                      storeFile = file(keystoreProperties["storeFile"] as String)
-                      storePassword = keystoreProperties["storePassword"] as String
-                  }
-              }
-              buildTypes {
-                  getByName("release") {
-                      signingConfig = signingConfigs.getByName("release")
-                  }
-              }
-          '''
-          imports = '''import java.io.FileInputStream
+
+          imports = """import java.io.FileInputStream
           import java.util.Properties
 
           val keystoreProperties = Properties()
@@ -77,26 +63,65 @@ jobs:
               keystoreProperties.load(FileInputStream(keystorePropertiesFile))
           }
 
-          '''
-          # Find the android { block and its matching closing brace; do not rely on a
-          # fragile text pattern that can insert signing DSL outside the Android block.
-          start = s.find("android {")
-          if start < 0:
-              raise SystemExit("Could not find android { block in generated Gradle file")
-          depth = 0
-          end = None
-          for i in range(start, len(s)):
-              if s[i] == "{":
-                  depth += 1
-              elif s[i] == "}":
-                  depth -= 1
-                  if depth == 0:
-                      end = i
-                      break
-          if end is None:
-              raise SystemExit("Could not find the end of the android { block")
-          s = s[:end] + block + s[end:]
-          p.write_text(imports + s)
+          """
+          if "val keystoreProperties = Properties()" not in s:
+              s = imports + s
+
+          signing = """signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties.getProperty("keyAlias")
+                      keyPassword = keystoreProperties.getProperty("keyPassword")
+                      storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+                      storePassword = keystoreProperties.getProperty("storePassword")
+                  }
+              }"""
+
+          # Replace Flutter's generated signingConfigs block, if present.
+          match = re.search(r"(?m)^\\s*signingConfigs\\s*\\{", s)
+          if match:
+              brace = s.find("{", match.start())
+              depth = 0
+              block_end = None
+              for i in range(brace, len(s)):
+                  if s[i] == "{":
+                      depth += 1
+                  elif s[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          block_end = i + 1
+                          break
+              if block_end is None:
+                  raise SystemExit("Could not parse existing signingConfigs block")
+              s = s[:match.start()] + signing + s[block_end:]
+          else:
+              android = s.find("android {")
+              if android < 0:
+                  raise SystemExit("Could not find android block")
+              build_types = s.find("buildTypes {", android)
+              if build_types < 0:
+                  raise SystemExit("Could not find buildTypes block")
+              s = s[:build_types] + "    " + signing + "\\n    " + s[build_types:]
+
+          # Ensure release builds use the persistent key, not Flutter's debug key.
+          bt = s.find("buildTypes {")
+          if bt < 0:
+              raise SystemExit("Could not find buildTypes block")
+          rel = s.find("release {", bt)
+          if rel < 0:
+              raise SystemExit("Could not find release build type")
+          close = s.find("}", rel)
+          if close < 0:
+              raise SystemExit("Could not find end of release build type")
+          section = s[rel:close]
+          section = re.sub(
+              r"signingConfig\\s*=\\s*signingConfigs\\.getByName\\(\\"[^\\"]+\\"\\)",
+              'signingConfig = signingConfigs.getByName("release")',
+              section
+          )
+          if 'signingConfig = signingConfigs.getByName("release")' not in section:
+              section += '\\n        signingConfig = signingConfigs.getByName("release")'
+          s = s[:rel] + section + s[close:]
+          p.write_text(s)
           PY
 
       - name: Install dependencies
