@@ -52,7 +52,7 @@ jobs:
           s = p.read_text()
           imports = 'import java.io.FileInputStream\nimport java.util.Properties\n\nval keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nif (keystorePropertiesFile.exists()) { keystoreProperties.load(FileInputStream(keystorePropertiesFile)) }\n\n'
           s = imports + s
-          needle = "\\n}\\n\\nflutter {"
+          needle = "\n}\n\nflutter {"
           signing = '''
               signingConfigs {
                   create("release") {
@@ -72,7 +72,7 @@ jobs:
           flutter {'''
           if needle not in s:
               raise SystemExit("Could not locate Android block in generated Gradle file")
-          p.write_text(s.replace(needle, "\\n" + signing, 1))
+          p.write_text(s.replace(needle, "\n" + signing, 1))
           PY
 
       - name: Install dependencies
