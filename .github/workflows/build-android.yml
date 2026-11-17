@@ -1,9 +1,12 @@
-name: Build Little Quest Android APK
+name: Build and publish Little Quest Android APK
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   build-android:
@@ -18,27 +21,81 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android project
-        run: flutter create --platforms=android --project-name=little_quest build_app
+      - name: Generate Android project with the existing app ID
+        run: flutter create --platforms=android --org=com.example --project-name=little_quest build_app
 
-      - name: Install corrected MVP source
+      - name: Install Little Quest source
         run: |
           cp app/pubspec.yaml build_app/pubspec.yaml
           rm -rf build_app/lib
           cp -R app/lib build_app/lib
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET"/>' build_app/android/app/src/main/AndroidManifest.xml
+
+      - name: Configure persistent Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > build_app/android/app/upload-keystore.jks
+          cat > build_app/android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build_app/android/app/build.gradle.kts")
+          s = p.read_text()
+          imports = 'import java.io.FileInputStream\nimport java.util.Properties\n\nval keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nif (keystorePropertiesFile.exists()) { keystoreProperties.load(FileInputStream(keystorePropertiesFile)) }\n\n'
+          s = imports + s
+          needle = "\\n}\\n\\nflutter {"
+          signing = '''
+              signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties["keyAlias"] as String
+                      keyPassword = keystoreProperties["keyPassword"] as String
+                      storeFile = file(keystoreProperties["storeFile"] as String)
+                      storePassword = keystoreProperties["storePassword"] as String
+                  }
+              }
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+          }
+          
+          flutter {'''
+          if needle not in s:
+              raise SystemExit("Could not locate Android block in generated Gradle file")
+          p.write_text(s.replace(needle, "\\n" + signing, 1))
+          PY
 
       - name: Install dependencies
         working-directory: build_app
         run: flutter pub get
 
-      - name: Build release APK
+      - name: Build signed release APK
         working-directory: build_app
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: little-quest-android-apk
           path: build_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish APK as GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.0
+          name: Little Quest v0.2.0
+          target_commitish: ${{ github.sha }}
+          files: build_app/build/app/outputs/flutter-apk/app-release.apk
+          make_latest: true
