@@ -21,7 +21,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android project with the existing app ID
+      - name: Generate Android project
         run: flutter create --platforms=android --org=com.example --project-name=little_quest build_app
 
       - name: Install Little Quest source
@@ -38,6 +38,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           test -n "$ANDROID_KEYSTORE_BASE64"
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > build_app/android/app/upload-keystore.jks
           cat > build_app/android/key.properties <<EOF
@@ -50,10 +51,9 @@ jobs:
           from pathlib import Path
           p = Path("build_app/android/app/build.gradle.kts")
           s = p.read_text()
-          imports = 'import java.io.FileInputStream\nimport java.util.Properties\n\nval keystoreProperties = Properties()\nval keystorePropertiesFile = rootProject.file("key.properties")\nif (keystorePropertiesFile.exists()) { keystoreProperties.load(FileInputStream(keystorePropertiesFile)) }\n\n'
-          s = imports + s
-          needle = "\n}\n\nflutter {"
-          signing = '''
+          if "signingConfigs" in s:
+              raise SystemExit("Signing configuration already exists; refusing to duplicate it")
+          block = '''
               signingConfigs {
                   create("release") {
                       keyAlias = keystoreProperties["keyAlias"] as String
@@ -67,12 +67,36 @@ jobs:
                       signingConfig = signingConfigs.getByName("release")
                   }
               }
+          '''
+          imports = '''import java.io.FileInputStream
+          import java.util.Properties
+
+          val keystoreProperties = Properties()
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
           }
-          
-          flutter {'''
-          if needle not in s:
-              raise SystemExit("Could not locate Android block in generated Gradle file")
-          p.write_text(s.replace(needle, "\n" + signing, 1))
+
+          '''
+          # Find the android { block and its matching closing brace; do not rely on a
+          # fragile text pattern that can insert signing DSL outside the Android block.
+          start = s.find("android {")
+          if start < 0:
+              raise SystemExit("Could not find android { block in generated Gradle file")
+          depth = 0
+          end = None
+          for i in range(start, len(s)):
+              if s[i] == "{":
+                  depth += 1
+              elif s[i] == "}":
+                  depth -= 1
+                  if depth == 0:
+                      end = i
+                      break
+          if end is None:
+              raise SystemExit("Could not find the end of the android { block")
+          s = s[:end] + block + s[end:]
+          p.write_text(imports + s)
           PY
 
       - name: Install dependencies
