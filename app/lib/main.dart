@@ -1,180 +1,59 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
-void main() => runApp(const LittleQuest());
-
-class LittleQuest extends StatelessWidget {
-  const LittleQuest({super.key});
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'Little Quest',
-    theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF55B987)), scaffoldBackgroundColor: const Color(0xFFFFF8E9)),
-    home: const AdventurePage(),
-  );
+void main()=>runApp(const LQ());
+const ink=Color(0xFF23324D),cream=Color(0xFFFFF8E9),green=Color(0xFF55B987);
+const worlds=[
+['English Garden','🌻','Letters, words and stories',0xFFFFE7A8,[
+['Letter explorers',[
+['Which letter starts BALL?','B',['A','B','C'],'Say B-B-BALL.'],['Which word starts with S?','Sun',['Cat','Sun','Dog'],'Sun starts with s.'],['Choose the animal: 🐱','Cat',['Dog','Cat','Bird'],'A cat says meow!']]],
+['Word garden',[
+['Which one is a butterfly?','🦋',['🦋','🐟','🌼'],'A butterfly has colourful wings.'],['What do we read?','Book',['Shoe','Book','Cup'],'Books have pages and stories.'],['Which word rhymes with sun?','Fun',['Cup','Fun','Bed'],'Sun and fun rhyme.']]],
+['Story stars',[
+['What helps us in the rain?','Umbrella',['Umbrella','Ball','Sunglasses'],'An umbrella keeps us dry.'],['A bird can...','Fly',['Drive','Fly','Read'],'Birds use wings to fly.'],['Opposite of big?','Small',['Tall','Small','Fast'],'Small means not big.']]]]],
+['Number Mountain','⛰️','Counting, patterns and maths',0xFFD8E9FF,[
+['Counting trail',[
+['What comes after 2?','3',['1','3','5'],'Count 1, 2, 3.'],['How many stars? ⭐ ⭐ ⭐','3',['2','3','4'],'Count each star once.'],['What is 1 + 1?','2',['1','2','3'],'One and one make two.']]],
+['Number bridges',[
+['What is 2 + 1?','3',['2','3','4'],'Count one more after two.'],['What is 3 - 1?','2',['1','2','3'],'Three take away one leaves two.'],['Which number is bigger?','5',['2','5','1'],'Five is more than two.']]],
+['Pattern peak',[
+['What comes next? 🔴 🔵 🔴 🔵','🔴',['🔵','🔴','🟢'],'Red and blue take turns.'],['What comes next? 2, 4, 6...','8',['7','8','9'],'Count by twos.'],['Which shape has 3 sides?','Triangle',['Circle','Square','Triangle'],'A triangle has three sides.']]]]],
+['Wonder Woods','🌳','Science and our world',0xFFDDF1D6,[
+['Living things',[
+['Which one is living?','🌳',['🌳','🪑','🚗'],'A tree grows and needs water.'],['What does a plant need?','Sunlight',['TV','Sunlight','Shoes'],'Plants need sunlight and water.'],['Which animal lives in water?','🐟',['🐟','🐈','🐘'],'Fish live in water.']]],
+['Our senses',[
+['Which helps us hear music?','Ears',['Eyes','Ears','Nose'],'We hear with our ears.'],['Which helps us see colours?','Eyes',['Hands','Eyes','Feet'],'We see with our eyes.'],['Which one makes a sound?','Bell',['Bell','Blue','Soft'],'A bell can ring.']]],
+['Earth helpers',[
+['Where should paper go?','Recycling bin',['River','Recycling bin','Road'],'Recycling helps reuse materials.'],['What do we save by turning off a tap?','Water',['Sand','Water','Clouds'],'Every drop matters.'],['How should we treat trees?','Protect them',['Break branches','Protect them','Carve them'],'Trees give shade and homes.']]]]]
+];
+class LQ extends StatelessWidget{const LQ({super.key});@override Widget build(BuildContext c)=>MaterialApp(title:'Little Quest',debugShowCheckedModeBanner:false,theme:ThemeData(useMaterial3:true,colorScheme:ColorScheme.fromSeed(seedColor:green),scaffoldBackgroundColor:cream),home:const Home());}
+class Home extends StatefulWidget{const Home({super.key});@override State<Home> createState()=>_HomeState();}
+class _HomeState extends State<Home>{
+final t=FlutterTts();int stars=0,done=0,age=0,tab=0;String nick='Little Explorer';bool sound=true;Set<String> passed={};
+@override void initState(){super.initState();t.setLanguage('en-US');t.setSpeechRate(.43);load();}
+Future<void> load()async{final p=await SharedPreferences.getInstance();if(!mounted)return;setState((){stars=p.getInt('stars')??0;done=p.getInt('done')??0;age=p.getInt('age')??0;nick=p.getString('nick')??nick;sound=p.getBool('sound')??true;passed=(p.getStringList('passed')??[]).toSet();});if(p.getBool('intro')!=true&&mounted){final a=await showDialog<int>(context:context,barrierDismissible:false,builder:(d)=>AlertDialog(title:const Text('Welcome, explorer! 🌈'),content:const Text('Choose an age group.'),actions:[for(int i=0;i<3;i++)TextButton(onPressed:()=>Navigator.pop(d,i),child:Text(['Ages 3–5','Ages 6–8','Ages 9–11'][i]))]));if(a!=null){age=a;await p.setInt('age',a);await p.setBool('intro',true);if(mounted)setState((){});speak('Hello '+nick+'! I am Pip. Let us learn together!');}}}
+Future<void> speak(String s)async{if(!sound)return;try{await t.stop();await t.speak(s);}catch(_){}}
+Future<void> save(int score,String id)async{final p=await SharedPreferences.getInstance();setState((){stars+=score;done++;passed.add(id);});await p.setInt('stars',stars);await p.setInt('done',done);await p.setStringList('passed',passed.toList());}
+Future<void> gate()async{final c=TextEditingController();final ok=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(title:const Text('Grown-up check 🔒'),content:TextField(controller:c,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Solve 4 + 3')),actions:[TextButton(onPressed:()=>Navigator.pop(d,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(d,c.text=='7'),child:const Text('Continue'))]));if(ok==true&&mounted)setState(()=>tab=2);}
+@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('LITTLE QUEST 🦊',style:TextStyle(fontWeight:FontWeight.w900)),actions:[IconButton(onPressed:()async{setState(()=>sound=!sound);final p=await SharedPreferences.getInstance();await p.setBool('sound',sound);if(!sound)t.stop();},icon:Icon(sound?Icons.volume_up:Icons.volume_off)),Padding(padding:const EdgeInsets.all(12),child:Text('⭐ $stars'))]),body:IndexedStack(index:tab,children:[map(),buddy(),parents()]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i){if(i==2)gate();else setState(()=>tab=i);},destinations:const[NavigationDestination(icon:Icon(Icons.explore),label:'Adventure'),NavigationDestination(icon:Icon(Icons.pets),label:'Pip'),NavigationDestination(icon:Icon(Icons.family_restroom),label:'Parents')]));
+Widget map()=>ListView(padding:const EdgeInsets.all(16),children:[Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(color:const Color(0xFFFFE7B0),borderRadius:BorderRadius.circular(24)),child:Column(children:[const Text('🦊',style:TextStyle(fontSize:64)),Text('Hi '+nick+'! Your adventure starts here.',textAlign:TextAlign.center,style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold,color:ink)),Text('Age path: '+['3–5','6–8','9–11'][age]),FilledButton(onPressed:()=>speak('Hello explorer! Choose a world and let us learn!'),child:const Text('Meet Pip'))])),for(int w=0;w<worlds.length;w++)worldCard(w)]);
+Widget worldCard(int w){final x=worlds[w];final levels=x[4] as List;return Card(color:Color(x[3] as int),child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(x[1].toString()+'  '+x[0].toString(),style:const TextStyle(fontSize:20,fontWeight:FontWeight.w900,color:ink)),Text(x[2].toString()),for(int l=0;l<levels.length;l++)ListTile(leading:CircleAvatar(child:Text(passed.contains('$w-$l')?'⭐':(l+1).toString())),title:Text(levels[l][0] as String),subtitle:const Text('3 short activities'),trailing:const Icon(Icons.play_circle_fill,color:green),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>Quiz(title:levels[l][0] as String,questions:levels[l][1] as List,keyId:'$w-$l',say:speak,save:save))))])));}
+Widget buddy()=>Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[const Text('🦊',style:TextStyle(fontSize:110)),const Text('PIP THE FOX',style:TextStyle(fontSize:26,fontWeight:FontWeight.w900)),const Text('Your friendly learning buddy!'),FilledButton.icon(onPressed:()=>speak('You are doing a wonderful job. Mistakes help our brains grow!'),icon:const Icon(Icons.volume_up),label:const Text('Hear Pip speak'))]));
+Widget parents()=>ListView(padding:const EdgeInsets.all(20),children:[const Text('PARENT CORNER',style:TextStyle(fontSize:22,fontWeight:FontWeight.w900)),Text('Child: '+nick),Text('Age group: '+['3–5','6–8','9–11'][age]),Text('Levels completed: $done'),Text('Stars earned: $stars'),ListTile(title:const Text('Change child nickname'),onTap:()async{final c=TextEditingController(text:nick);final v=await showDialog<String>(context:context,builder:(d)=>AlertDialog(content:TextField(controller:c),actions:[TextButton(onPressed:()=>Navigator.pop(d),child:const Text('Cancel')),TextButton(onPressed:()=>Navigator.pop(d,c.text),child:const Text('Save'))]));if(v!=null&&v.trim().isNotEmpty){nick=v.trim();final p=await SharedPreferences.getInstance();await p.setString('nick',nick);setState((){});}}),SwitchListTile(value:sound,onChanged:(v)async{setState(()=>sound=v);final p=await SharedPreferences.getInstance();await p.setBool('sound',v);if(!v)t.stop();},title:const Text('Pip voice and sound')),ListTile(title:const Text('Check for app updates'),leading:const Icon(Icons.system_update),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>const UpdatePage()))),const Divider(),const Text('Privacy: progress stays on this device. No child accounts, cloud sync or third-party ads. The parent gate is a demo check, not secure verification. Parental consent, deletion controls and a full privacy review are required before public release.')]);
 }
-
-class AdventurePage extends StatefulWidget {
-  const AdventurePage({super.key});
-  @override
-  State<AdventurePage> createState() => _AdventurePageState();
+class Quiz extends StatefulWidget{final String title,keyId;final List questions;final Future<void> Function(String) say;final Future<void> Function(int,String) save;const Quiz({super.key,required this.title,required this.questions,required this.keyId,required this.say,required this.save});@override State<Quiz> createState()=>_QuizState();}
+class _QuizState extends State<Quiz>{int i=0,score=0;bool answered=false,complete=false;String feedback='';List get q=>widget.questions[i] as List;
+void answer(String v){final ok=v==q[1];setState((){answered=true;feedback=ok?'Wonderful! You did it! ⭐':'Good try! Ask Pip for a hint and try again.';});widget.say((ok?'That is correct! ':'Good try. ')+q[3] as String);if(ok)score++;}
+Future<void> next()async{if(i<widget.questions.length-1){setState((){i++;answered=false;feedback='';});}else{await widget.save(score,widget.keyId);if(mounted)setState(()=>complete=true);widget.say('Quest complete! You earned '+score.toString()+' stars.');}}
+@override Widget build(BuildContext c){if(complete)return Scaffold(appBar:AppBar(title:Text(widget.title)),body:Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[const Text('🎉',style:TextStyle(fontSize:90)),const Text('LEVEL COMPLETE!',style:TextStyle(fontSize:26,fontWeight:FontWeight.w900)),Text('You earned '+score.toString()+' stars!'),FilledButton(onPressed:()=>Navigator.pop(context),child:const Text('Back to map'))])));return Scaffold(appBar:AppBar(title:Text(widget.title),actions:[IconButton(onPressed:()=>widget.say(q[0].toString()+'. '+(q[2] as List).join(', ')),icon:const Icon(Icons.volume_up))]),body:Padding(padding:const EdgeInsets.all(20),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[LinearProgressIndicator(value:(i+1)/widget.questions.length),const SizedBox(height:20),const Center(child:Text('🦊',style:TextStyle(fontSize:55))),Text('QUESTION '+(i+1).toString()+' OF '+widget.questions.length.toString(),textAlign:TextAlign.center),Text(q[0] as String,textAlign:TextAlign.center,style:const TextStyle(fontSize:23,fontWeight:FontWeight.w900,color:ink)),const SizedBox(height:20),for(final v in q[2] as List)Padding(padding:const EdgeInsets.only(bottom:10),child:OutlinedButton(onPressed:answered?null:()=>answer(v as String),style:OutlinedButton.styleFrom(padding:const EdgeInsets.all(16),backgroundColor:Colors.white),child:Text(v as String,style:const TextStyle(fontSize:21,color:ink)))),const Spacer(),if(feedback.isNotEmpty)Text(feedback,textAlign:TextAlign.center),if(!answered)OutlinedButton.icon(onPressed:()=>widget.say(q[3] as String),icon:const Icon(Icons.lightbulb),label:const Text('Ask Pip for a hint')),if(answered&&feedback.startsWith('Wonderful'))FilledButton(onPressed:next,child:Text(i==widget.questions.length-1?'Finish level':'Next question'))])));}
 }
-
-class _AdventurePageState extends State<AdventurePage> {
-  int stars = 0;
-  int completed = 0;
-  int tab = 0;
-  String nickname = 'Little Explorer';
-
-  @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((p) {
-      if (!mounted) return;
-      setState(() {
-        stars = p.getInt('stars') ?? 0;
-        completed = p.getInt('completed') ?? 0;
-        nickname = p.getString('nickname') ?? 'Little Explorer';
-      });
-    });
-  }
-
-  Future<void> finishQuest(int earned) async {
-    final p = await SharedPreferences.getInstance();
-    stars += earned;
-    completed += 1;
-    await p.setInt('stars', stars);
-    await p.setInt('completed', completed);
-    if (mounted) setState(() {});
-  }
-
-  void openQuest(String subject) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => QuestPage(subject: subject, onFinish: finishQuest)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const navy = Color(0xFF23324D);
-    return Scaffold(
-      appBar: AppBar(backgroundColor: const Color(0xFFFFF8E9), title: const Text('LITTLE QUEST', style: TextStyle(color: navy, fontWeight: FontWeight.w900, letterSpacing: 1.2)), actions: [Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('⭐ ' + stars.toString(), style: const TextStyle(fontWeight: FontWeight.bold))))]),
-      body: tab == 0 ? ListView(padding: const EdgeInsets.all(18), children: [
-        Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(color: const Color(0xFFBDEBD1), borderRadius: BorderRadius.circular(25)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('YOUR ADVENTURE STARTS HERE!', style: TextStyle(color: navy, fontSize: 19, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          Text('Welcome, ' + nickname + '!', style: const TextStyle(color: navy, fontSize: 17)),
-          const Center(child: Text('🦊', style: TextStyle(fontSize: 76))),
-          const Text('Hi! I am Pip. Let us learn and explore together!', style: TextStyle(color: navy, fontWeight: FontWeight.w600)),
-        ])),
-        const SizedBox(height: 20),
-        const Text('CHOOSE YOUR WORLD', style: TextStyle(color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 10),
-        world('🌻', 'English Garden', 'Letters, words and stories', const Color(0xFFFFE7A8), () => openQuest('English')),
-        world('⛰️', 'Number Mountain', 'Numbers and counting', const Color(0xFFD8E9FF), () => openQuest('Math')),
-        world('🌳', 'Wonder Woods', 'Discover the world around you', const Color(0xFFDDF1D6), () => openQuest('Science')),
-      ]) : tab == 1 ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('🦊', style: TextStyle(fontSize: 100)), Text('Pip the Fox', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900, color: navy)), Text('Your friendly learning buddy!')])) : tab == 2 ? Center(child: Text('🏅  ' + completed.toString() + ' quests  •  ⭐ ' + stars.toString() + ' stars', style: const TextStyle(fontSize: 19, color: navy, fontWeight: FontWeight.bold))) : Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.family_restroom, size: 65, color: navy),
-        const Text('Parent Corner', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: navy)),
-        Text(completed.toString() + ' quests completed • ' + stars.toString() + ' stars'),
-        const Padding(padding: EdgeInsets.all(20), child: Text('Prototype only: progress is saved on this device. Secure parent verification and cloud accounts are not included yet.', textAlign: TextAlign.center)),
-        FilledButton(onPressed: () async {
-          final c = TextEditingController(text: nickname);
-          final value = await showDialog<String>(context: context, builder: (d) => AlertDialog(title: const Text('Child nickname'), content: TextField(controller: c), actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('Save'))]));
-          if (value != null && value.isNotEmpty) {
-            final p = await SharedPreferences.getInstance();
-            await p.setString('nickname', value);
-            if (mounted) setState(() => nickname = value);
-          }
-        }, child: const Text('Edit nickname')),
-      ])),
-      bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (v) => setState(() => tab = v), destinations: const [
-        NavigationDestination(icon: Icon(Icons.explore_outlined), label: 'Adventure'),
-        NavigationDestination(icon: Icon(Icons.pets_outlined), label: 'Buddy'),
-        NavigationDestination(icon: Icon(Icons.star_outline), label: 'Stickers'),
-        NavigationDestination(icon: Icon(Icons.family_restroom), label: 'Parents'),
-      ]),
-    );
-  }
-
-  Widget world(String emoji, String title, String subtitle, Color color, VoidCallback tap) => Card(color: color, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), child: ListTile(contentPadding: const EdgeInsets.all(14), leading: Text(emoji, style: const TextStyle(fontSize: 38)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)), subtitle: Text(subtitle), trailing: const Icon(Icons.arrow_forward_ios), onTap: tap));
-}
-
-class QuestPage extends StatefulWidget {
-  final String subject;
-  final Future<void> Function(int) onFinish;
-  const QuestPage({super.key, required this.subject, required this.onFinish});
-  @override
-  State<QuestPage> createState() => _QuestPageState();
-}
-
-class _QuestPageState extends State<QuestPage> {
-  int index = 0;
-  int score = 0;
-  String feedback = '';
-  bool done = false;
-
-  List<Map<String, Object>> get questions {
-    if (widget.subject == 'English') return [
-      {'q': 'Which letter does BALL start with?', 'a': 'B', 'c': ['A', 'B', 'C'], 'h': 'B is for ball!'},
-      {'q': 'Which one is a butterfly?', 'a': '🦋', 'c': ['🦋', '🐟', '🌼'], 'h': 'A butterfly has colorful wings.'},
-      {'q': 'Choose the word for 🐱', 'a': 'Cat', 'c': ['Dog', 'Cat', 'Sun'], 'h': 'A cat says meow!'},
-    ];
-    if (widget.subject == 'Math') return [
-      {'q': 'What number comes after 2?', 'a': '3', 'c': ['1', '3', '5'], 'h': 'Count: 1, 2, 3!'},
-      {'q': 'How many stars? ⭐ ⭐ ⭐', 'a': '3', 'c': ['2', '3', '4'], 'h': 'Count each star.'},
-      {'q': 'What is 1 + 1?', 'a': '2', 'c': ['1', '2', '3'], 'h': 'One more than one is two.'},
-    ];
-    return [
-      {'q': 'Which one is a living thing?', 'a': '🌳', 'c': ['🌳', '🪑', '🚗'], 'h': 'A tree grows and needs water.'},
-      {'q': 'What does a plant need?', 'a': '🌞', 'c': ['🌞', '📺', '👟'], 'h': 'Plants use sunlight to grow.'},
-      {'q': 'Which animal lives in water?', 'a': '🐟', 'c': ['🐟', '🐈', '🐘'], 'h': 'Fish swim in water.'},
-    ];
-  }
-
-  void answer(String value) {
-    final correct = value == questions[index]['a'];
-    setState(() {
-      if (correct) {
-        score++;
-        feedback = 'Wonderful! That is right! ⭐';
-      } else {
-        feedback = 'Good try! Have another go, or tap Hint.';
-      }
-    });
-  }
-
-  Future<void> next() async {
-    if (index < questions.length - 1) {
-      setState(() { index++; feedback = ''; });
-    } else {
-      await widget.onFinish(score);
-      if (mounted) setState(() => done = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const navy = Color(0xFF23324D);
-    if (done) return Scaffold(appBar: AppBar(), body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      const Text('🎉', style: TextStyle(fontSize: 90)),
-      const Text('Quest complete!', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: navy)),
-      Text('You earned ' + score.toString() + ' stars!', style: const TextStyle(fontSize: 20)),
-      FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Back to adventure')),
-    ])));
-    final q = questions[index];
-    final correct = feedback.startsWith('Wonderful');
-    return Scaffold(appBar: AppBar(title: Text(widget.subject + ' Quest')), body: Padding(padding: const EdgeInsets.all(22), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      LinearProgressIndicator(value: (index + 1) / questions.length, minHeight: 9),
-      const SizedBox(height: 28),
-      Text('QUESTION ' + (index + 1).toString() + ' OF ' + questions.length.toString(), textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF55B987), fontWeight: FontWeight.w900)),
-      const SizedBox(height: 24),
-      Text(q['q'] as String, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: navy)),
-      const SizedBox(height: 28),
-      for (final choice in q['c'] as List<String>)
-        Padding(padding: const EdgeInsets.only(bottom: 12), child: OutlinedButton(onPressed: correct ? null : () => answer(choice), child: Padding(padding: const EdgeInsets.all(12), child: Text(choice, style: const TextStyle(fontSize: 21, color: navy, fontWeight: FontWeight.bold))))),
-      const Spacer(),
-      if (feedback.isNotEmpty) Padding(padding: const EdgeInsets.all(12), child: Text(feedback, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: navy))),
-      if (!correct) OutlinedButton(onPressed: () => setState(() => feedback = q['h'] as String), child: const Text('💡 Hint')),
-      if (correct) FilledButton(onPressed: next, child: Text(index == questions.length - 1 ? 'Finish quest' : 'Next question')),
-    ])));
-  }
+class UpdatePage extends StatefulWidget{const UpdatePage({super.key});@override State<UpdatePage> createState()=>_UpdatePageState();}
+class _UpdatePageState extends State<UpdatePage>{bool busy=false;String message='Check for the latest Little Quest release.';String? apk;
+Future<void> check()async{setState(()=>busy=true);try{final r=await http.get(Uri.parse('https://api.github.com/repos/Abubakkar38133/version-0.1/releases/latest'));if(r.statusCode==200){final j=jsonDecode(r.body);final a=(j['assets'] as List).where((x)=>(x['name'] as String).toLowerCase().endsWith('.apk')).toList();if(a.isNotEmpty){apk=a.first['browser_download_url'];message='Version '+j['tag_name']+' is available.';}else{message='Release found, but no APK is attached.';}}else{message='No published update is available yet.';}}catch(_){message='Could not connect. Try again later.';}if(mounted)setState(()=>busy=false);}
+Future<void> download()async{if(apk!=null)await launchUrl(Uri.parse(apk!),mode:LaunchMode.externalApplication);}
+@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('App updates')),body:Padding(padding:const EdgeInsets.all(24),child:Column(children:[const Icon(Icons.system_update,size:70,color:green),const Text('Keep Little Quest up to date',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold),textAlign:TextAlign.center),Text(message,textAlign:TextAlign.center),FilledButton(onPressed:busy?null:check,child:Text(busy?'Checking...':'Check for updates')),if(apk!=null)FilledButton.tonal(onPressed:download,child:const Text('Download update')),const Spacer(),const Text('Android will ask you to confirm installation. A different signing key may require removing the old test app first.',textAlign:TextAlign.center)])));}
 }
