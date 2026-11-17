@@ -18,34 +18,27 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Extract MVP source
-        run: |
-          mkdir -p source
-          unzip -q Little_Quest_MVP_Source.zip -d source
-          test -f source/pubspec.yaml
-          test -f source/lib/main.dart
+      - name: Generate Android project
+        run: flutter create --platforms=android --project-name=little_quest build_app
 
-      - name: Generate Android project files
-        run: flutter create --platforms=android --project-name=little_quest app
-
-      - name: Add MVP app code
+      - name: Install corrected MVP source
         run: |
-          cp source/pubspec.yaml app/pubspec.yaml
-          rm -rf app/lib
-          cp -R source/lib app/lib
+          cp app/pubspec.yaml build_app/pubspec.yaml
+          rm -rf build_app/lib
+          cp -R app/lib build_app/lib
 
       - name: Install dependencies
-        working-directory: app
+        working-directory: build_app
         run: flutter pub get
 
       - name: Build release APK
-        working-directory: app
+        working-directory: build_app
         run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: little-quest-android-apk
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: build_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
